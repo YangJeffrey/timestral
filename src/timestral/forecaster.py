@@ -326,7 +326,10 @@ class TimestralForecaster:
         ctx_min = torch.nan_to_num(inputs.masked_fill(not_obs, float("inf")).amin(-1, keepdim=True), posinf=0.0)
         c = self.config
         _, scale = causal_patch_loc_scale(inputs, observation_mask, c.patch_size, c.minimum_scale, c.stabilize_with_global)
-        anchor_scale = scale[..., -1:] * self.quantile_real_cap_k
+        # counts how many real points each series has
+        n_obs = observation_mask.sum(-1, keepdim=True)
+        # if 1 or 2 points, clamp forecast to the observed range
+        anchor_scale = scale[..., -1:] * torch.where((n_obs >= 1) & (n_obs < 3), 0.0, self.quantile_real_cap_k)
         return quantiles.clamp((ctx_min - anchor_scale).unsqueeze(-1), (ctx_max + anchor_scale).unsqueeze(-1))
 
     def _assemble_rows(
